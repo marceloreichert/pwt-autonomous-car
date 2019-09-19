@@ -15,10 +15,12 @@ defmodule AutonomousCar.Objects.Car do
 
   def update_rotation(state, action) do
     rotation = action?(action)
-    put_in(state, [:objects, :car, :angle], state.objects.car.angle + rotation)
+
+    state
+    |> put_in([:objects, :car, :angle], state.objects.car.angle + rotation)
   end
 
-  defp action?(0), do: 0
   defp action?(1), do: -20
   defp action?(2), do: 20
+  defp action?(_), do: 0
 end

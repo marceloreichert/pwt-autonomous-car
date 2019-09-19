@@ -131,7 +131,9 @@ defmodule AutonomousCar.Scene.Environment do
       |> Network.predict([0, 0, 0, orientation, -orientation])
       |> IO.inspect
 
-    Car.update_rotation(state, action)
+    state =
+      state
+      |> Car.update_rotation(action)
 
     state =
       if rem(frame_count, 2) == 0 do
@@ -165,20 +167,20 @@ defmodule AutonomousCar.Scene.Environment do
     {:noreply, new_state, push: graph}
   end
 
-  # Keyboard controls
-  def handle_input({:key, {"left", :press, _}}, _context, state) do
-    {:noreply, Car.update_rotation(state, 1)}
-  end
-
-  def handle_input({:key, {"right", :press, _}}, _context, state) do
-    {:noreply, Car.update_rotation(state, 2)}
-  end
-
-  def handle_input({:key, {"up", :press, _}}, _context, state) do
-    {:noreply, Car.update_rotation(state, 0)}
-  end
-
-  def handle_input(_input, _context, state), do: {:noreply, state}
+  # # Keyboard controls
+  # def handle_input({:key, {"left", :press, _}}, _context, state) do
+  #   {:noreply, Car.update_rotation(state, 1)}
+  # end
+  #
+  # def handle_input({:key, {"right", :press, _}}, _context, state) do
+  #   {:noreply, Car.update_rotation(state, 2)}
+  # end
+  #
+  # def handle_input({:key, {"up", :press, _}}, _context, state) do
+  #   {:noreply, Car.update_rotation(state, 0)}
+  # end
+  #
+  # def handle_input(_input, _context, state), do: {:noreply, state}
 
   defp draw_objects(graph, object_map) do
     Enum.reduce(object_map, graph, fn {object_type, object_data}, graph ->
