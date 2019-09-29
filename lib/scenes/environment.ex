@@ -70,43 +70,43 @@ defmodule AutonomousCar.Scene.Environment do
 
     # Posição atual do carro
     {car_x, car_y} = state.objects.car.coords
-    IO.inspect {car_x, car_y}, label: 'Posição do carro'
+    # IO.inspect {car_x, car_y}, label: 'Posição do carro'
 
     # Última posição do carro
     {car_last_x, car_last_y} = state.objects.car.last_coords
-    IO.inspect {car_last_x, car_last_y}, label: 'Última posição do carro'
+    # IO.inspect {car_last_x, car_last_y}, label: 'Última posição do carro'
 
     # Posição atual do objetivo
     {goal_x, goal_y} = state.objects.goal.coords
-    IO.inspect {goal_x, goal_y}, label: 'Posição do Objetivo'
+    # IO.inspect {goal_x, goal_y}, label: 'Posição do Objetivo'
 
     # Vetor1 - Posição atual do carro menos anterior
     vector1 = Scenic.Math.Vector2.sub({car_x, car_y}, {car_last_x, car_last_y})
-    IO.inspect vector1, label: 'Vector1'
+    # IO.inspect vector1, label: 'Vector1'
 
     # Vetor2 - Posição do objetivo - posicao anterior do carro
     vector2 = Scenic.Math.Vector2.sub({goal_x, goal_y}, {car_last_x, car_last_y})
-    IO.inspect vector2, label: 'Vector2'
+    # IO.inspect vector2, label: 'Vector2'
 
     # Normaliza vetor1
     vector1_normalized = Scenic.Math.Vector2.normalize(vector1)
-    IO.inspect vector1_normalized, label: 'Vector1 Normalizado'
+    # IO.inspect vector1_normalized, label: 'Vector1 Normalizado'
 
     # Normaliza vetor2
     vector2_normalized = Scenic.Math.Vector2.normalize(vector2)
-    IO.inspect vector2_normalized, label: 'Vector2 Normalizado'
+    # IO.inspect vector2_normalized, label: 'Vector2 Normalizado'
 
     # Orientação
     orientation = Scenic.Math.Vector2.dot(vector1_normalized, vector2_normalized)
-    IO.inspect orientation, label: 'Dot dos vetores'
+    # IO.inspect orientation, label: 'Dot dos vetores'
 
     # Orientação em Radiano
     orientation_rad = Math.acos(orientation)
-    IO.inspect orientation_rad, label: 'Orientação rad'
+    # IO.inspect orientation_rad, label: 'Orientação rad'
 
     # Orientação em Graus
     orientation_grad = (180 / :math.pi) * orientation_rad
-    IO.inspect orientation_grad, label: 'Orientação grad'
+    # IO.inspect orientation_grad, label: 'Orientação grad'
 
     # Rotação do carro
     # car_rotation_rad = state.objects.car.rotation

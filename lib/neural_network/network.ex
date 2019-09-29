@@ -14,16 +14,52 @@ defmodule NeuralNetwork.Network do
         output_neurons(layer_sizes)
       )
 
-    pid |> update(layers)
+    pid |> update_layers(layers)
     pid |> connect_layers
     {:ok, pid}
   end
 
   def get(pid), do: Agent.get(pid, & &1)
 
-  def update(pid, fields) do
-    fields = Map.merge(fields, %{pid: pid})
-    Agent.update(pid, &Map.merge(&1, fields))
+  def update_layers(pid, layers) do
+    layers = Map.merge(layers, %{pid: pid})
+    Agent.update(pid, &Map.merge(&1, layers))
+  end
+
+  def predict(network, input_values) do
+    network.input_layer
+    |> Layer.activate(:relu, input_values)
+
+    Enum.each(network.hidden_layers, fn hidden_layer ->
+      hidden_layer
+      |> Layer.activate(:relu)
+    end)
+
+    network.output_layer
+    |> Layer.activate(:sigmoid)
+
+    prob_actions =
+      network.output_layer
+      |> Layer.get()
+      |> Layer.neurons_output()
+      |> Activation.calculate_output(:softmax)
+
+    action =
+      prob_actions
+      |> Enum.find_index(fn value -> Enum.max(prob_actions) == value end)
+  end
+
+  def train(network, target_outputs) do
+    network.output_layer |> Layer.get() |> Layer.train(target_outputs)
+    network.pid |> update_layers(%{error: error_function(network, target_outputs)})
+
+    network.hidden_layers
+    |> Enum.reverse()
+    |> Enum.each(fn layer_pid ->
+      layer_pid |> Layer.get |> Layer.train(target_outputs)
+    end)
+
+    network.input_layer |> Layer.get() |> Layer.train(target_outputs)
   end
 
   defp input_neurons(layer_sizes) do
@@ -53,7 +89,10 @@ defmodule NeuralNetwork.Network do
   end
 
   defp connect_layers(pid) do
-    layers = pid |> Network.get() |> flatten_layers
+    layers =
+      pid
+      |> Network.get()
+      |> flatten_layers
 
     layers
     |> Stream.with_index()
@@ -69,44 +108,6 @@ defmodule NeuralNetwork.Network do
 
   defp flatten_layers(network) do
     [network.input_layer] ++ network.hidden_layers ++ [network.output_layer]
-  end
-
-  def predict(network, input_values) do
-    network.input_layer
-    |> Layer.activate(input_values)
-
-    Enum.each(network.hidden_layers, fn hidden_layer ->
-      hidden_layer
-      |> Layer.activate()
-    end)
-
-    network.output_layer
-    |> Layer.activate()
-
-    prob_actions =
-      network.output_layer
-      |> Layer.get()
-      |> Layer.neurons_output()
-      |> Activation.softmax()
-      |> IO.inspect
-
-    action =
-      prob_actions
-      |> Enum.find_index(fn value -> Enum.max(prob_actions) == value end)
-      |> IO.inspect
-  end
-
-  def train(network, target_outputs) do
-    network.output_layer |> Layer.get() |> Layer.train(target_outputs)
-    network.pid |> update(%{error: error_function(network, target_outputs)})
-
-    network.hidden_layers
-    |> Enum.reverse()
-    |> Enum.each(fn layer_pid ->
-      layer_pid |> Layer.get |> Layer.train(target_outputs)
-    end)
-
-    network.input_layer |> Layer.get() |> Layer.train(target_outputs)
   end
 
   defp error_function(network, target_outputs) do

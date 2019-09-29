@@ -32,15 +32,15 @@ defmodule NeuralNetwork.Layer do
     layer_pid |> update(%{neurons: get(layer_pid).neurons ++ neurons})
   end
 
-  def clear_neurons(layer_pid) do
-    layer_pid |> update(%{neurons: []})
-  end
-
-  def set_neurons(layer_pid, neurons) do
-    layer_pid
-    |> clear_neurons
-    |> add_neurons(neurons)
-  end
+  # def clear_neurons(layer_pid) do
+  #   layer_pid |> update(%{neurons: []})
+  # end
+  #
+  # def set_neurons(layer_pid, neurons) do
+  #   layer_pid
+  #   |> clear_neurons
+  #   |> add_neurons(neurons)
+  # end
 
   def train(layer, target_outputs \\ []) do
     layer.neurons
@@ -69,20 +69,17 @@ defmodule NeuralNetwork.Layer do
     Enum.any?(layer.neurons, &Neuron.get(&1).bias?)
   end
 
-  @doc """
-  Activate all neurons in the layer with a list of values.
-  """
-  def activate(layer_pid, values \\ nil) do
+  def activate(layer_pid, activation_type, values \\ nil) do
     layer = get(layer_pid)
-    # coerce to [] if nil
     values = List.wrap(values)
 
     layer.neurons
     |> Stream.with_index()
     |> Enum.each(fn tuple ->
       {neuron, index} = tuple
-      neuron |> Neuron.activate(Enum.at(values, index))
+      neuron |> Neuron.activate(activation_type, Enum.at(values, index))
     end)
+    layer_pid
   end
 
   def neurons_output(layer) do
