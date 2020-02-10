@@ -5,7 +5,7 @@ defmodule AutonomousCar.MixProject do
     [
       app: :autonomous_car,
       version: "0.1.0",
-      elixir: "~> 1.7",
+      elixir: "~> 1.10.0",
       build_embedded: true,
       start_permanent: Mix.env() == :prod,
       deps: deps()
@@ -26,6 +26,7 @@ defmodule AutonomousCar.MixProject do
       {:scenic, "~> 0.10"},
       {:scenic_driver_glfw, "~> 0.10"},
       {:math, "~> 0.3.0"},
+      {:neural_network, path: "~/works/neural_network_elixir"}
     ]
   end
 end

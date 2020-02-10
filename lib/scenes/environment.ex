@@ -28,7 +28,7 @@ defmodule AutonomousCar.Scene.Environment do
     {:ok, timer} = :timer.send_interval(60, :frame)
 
     # start neural network
-    {:ok, neural_network_pid} = Network.start_link([5, 30, 3])
+    {:ok, neural_network_pid} = Network.start_link([5, 30, 3], %{activation: :relu})
 
     state = %{
       viewport: viewport,
@@ -53,7 +53,8 @@ defmodule AutonomousCar.Scene.Environment do
             left: {0,0},
             center: {0,0},
             right: {0,0}
-          }
+          },
+          last_reward: 0,
         },
         goal: %{coords: {20,20}}
       }
@@ -75,6 +76,10 @@ defmodule AutonomousCar.Scene.Environment do
     # Última posição do carro
     {car_last_x, car_last_y} = state.objects.car.last_coords
     # IO.inspect {car_last_x, car_last_y}, label: 'Última posição do carro'
+
+    # Última recompensa do carro
+    {car_last_reward} = state.objects.car.last_reward
+    # IO.inspect {car_last_reward}, label: 'Última recompensa do carro'
 
     # Posição atual do objetivo
     {goal_x, goal_y} = state.objects.goal.coords
@@ -127,7 +132,7 @@ defmodule AutonomousCar.Scene.Environment do
     #Deep Learning AQUI retorna a action
     action =
       state.neural_network_pid
-      |> Network.get()
+      |> Network.model()
       |> Network.predict([0, 0, 0, orientation, -orientation])
       |> IO.inspect
 

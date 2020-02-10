@@ -5,7 +5,6 @@ defmodule AutonomousCar.Math.Activation do
   def calculate_output(input, :relu), do: relu(input)
 
   defp softmax([input]), do: softmax(input)
-
   defp softmax(input) do
     c = Enum.max(input)
     x1 = Enum.map(input, fn(y) -> y-c end)
