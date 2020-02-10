@@ -78,7 +78,7 @@ defmodule AutonomousCar.Scene.Environment do
     # IO.inspect {car_last_x, car_last_y}, label: 'Última posição do carro'
 
     # Última recompensa do carro
-    {car_last_reward} = state.objects.car.last_reward
+    car_last_reward = state.objects.car.last_reward
     # IO.inspect {car_last_reward}, label: 'Última recompensa do carro'
 
     # Posição atual do objetivo
@@ -132,7 +132,6 @@ defmodule AutonomousCar.Scene.Environment do
     #Deep Learning AQUI retorna a action
     action =
       state.neural_network_pid
-      |> Network.model()
       |> Network.predict([0, 0, 0, orientation, -orientation])
       |> IO.inspect
 
