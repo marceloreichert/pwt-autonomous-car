@@ -30,6 +30,9 @@ defmodule AutonomousCar.Scene.Environment do
     # start neural network
     {:ok, neural_network_pid} = Network.start_link([5, 30, 3], %{activation: :relu})
 
+    # start memory
+    {:ok, memory_pid} = Memory.start_link()
+
     state = %{
       viewport: viewport,
       viewport_width: viewport_width,
@@ -37,6 +40,7 @@ defmodule AutonomousCar.Scene.Environment do
       graph: graph,
       frame_count: 0,
       neural_network_pid: neural_network_pid,
+      memory_pid: memory_pid,
       objects: %{
         car: %{
           dimension: %{width: 20, height: 10},
@@ -55,6 +59,10 @@ defmodule AutonomousCar.Scene.Environment do
             right: {0,0}
           },
           last_reward: 0,
+          last_action: 0,
+          orientation: 0,
+          orientation_rad: 0,
+          orientation_grad: 0
         },
         goal: %{coords: {20,20}}
       }
@@ -78,19 +86,23 @@ defmodule AutonomousCar.Scene.Environment do
     # IO.inspect {car_last_x, car_last_y}, label: 'Última posição do carro'
 
     # Última recompensa do carro
-    car_last_reward = state.objects.car.last_reward
+    last_reward = state.objects.car.last_reward
     # IO.inspect {car_last_reward}, label: 'Última recompensa do carro'
+
+    # Última orientação do carro
+    orientation = state.objects.car.orientation
+    # IO.inspect {orientation}, label: 'Última orientação do carro'
 
     # Posição atual do objetivo
     {goal_x, goal_y} = state.objects.goal.coords
     # IO.inspect {goal_x, goal_y}, label: 'Posição do Objetivo'
 
-    # Vetor1 - Posição atual do carro menos anterior
-    vector1 = Scenic.Math.Vector2.sub({car_x, car_y}, {car_last_x, car_last_y})
+    # Vetor1 - Posição atual do carro menos objetivo
+    vector1 = Scenic.Math.Vector2.sub(state.objects.car.coords, state.objects.goal.coords)
     # IO.inspect vector1, label: 'Vector1'
 
     # Vetor2 - Posição do objetivo - posicao anterior do carro
-    vector2 = Scenic.Math.Vector2.sub({goal_x, goal_y}, {car_last_x, car_last_y})
+    vector2 = Scenic.Math.Vector2.sub(state.objects.car.sensor.center, state.objects.car.coords)
     # IO.inspect vector2, label: 'Vector2'
 
     # Normaliza vetor1
@@ -103,7 +115,7 @@ defmodule AutonomousCar.Scene.Environment do
 
     # Orientação
     orientation = Scenic.Math.Vector2.dot(vector1_normalized, vector2_normalized)
-    # IO.inspect orientation, label: 'Dot dos vetores'
+    # IO.inspect orientation, label: 'Orientation'
 
     # Orientação em Radiano
     orientation_rad = Math.acos(orientation)
@@ -124,16 +136,15 @@ defmodule AutonomousCar.Scene.Environment do
     # vector_velocity_rotated_y = vector_velocity_x * sin(car_rotation_grad) + vector_velocity_y * cos(car_rotation_grad);
     # IO.inspect {vector_velocity_rotated_x, vector_velocity_rotated_y}, label: 'Vetor velocidade rotacionado'
 
-    # Identifica se carro esta na areia ou não
-    signal_sensor_1 = 0
-    signal_sensor_2 = 0
-    signal_sensor_3 = 0
-
     #Deep Learning AQUI retorna a action
-    action =
+    prob_actions =
       state.neural_network_pid
       |> Network.predict([0, 0, 0, orientation, -orientation])
-      |> IO.inspect
+    # IO.inspect prob_actions, label: 'prob_actions -->'
+
+    action =
+      prob_actions |> Enum.find_index(fn value -> Enum.max(prob_actions) == value end)
+    # IO.inspect action, label: 'action -->'
 
     state =
       state
@@ -158,33 +169,83 @@ defmodule AutonomousCar.Scene.Environment do
     %{transforms: %{translate: sensor_center}} = List.first(sensor_center)
     %{transforms: %{translate: sensor_right}} = List.first(sensor_right)
 
+    # Identifica se carro esta na areia ou não
+    signal_center = 0
+    signal_right = 0
+    signal_left = 0
+
+    #reward
+    reward =
+      case orientation do
+        _orientation when _orientation > orientation -> 1
+        _orientation when _orientation < orientation -> -1
+        _ -> 0
+      end
+
+    Memory.push(state.memory_pid, %{
+      last_signal_center: signal_center,
+      last_signal_right: signal_right,
+      last_signal_left: signal_left,
+      orientation_pos: orientation,
+      orientation_neg: -orientation,
+      last_reward: reward,
+      last_action: state.objects.car.last_action,
+      new_action: action
+    })
+
     new_state =
       state
       |> update_in([:frame_count], &(&1 + 1))
       |> put_in([:objects, :car, :sensor, :center], sensor_center)
       |> put_in([:objects, :car, :sensor, :right], sensor_right)
       |> put_in([:objects, :car, :sensor, :left], sensor_left)
+      |> put_in([:objects, :car, :signal, :center], signal_center)
+      |> put_in([:objects, :car, :signal, :right], signal_right)
+      |> put_in([:objects, :car, :signal, :left], signal_left)
+      |> put_in([:objects, :car, :last_reward], reward)
+      |> put_in([:objects, :car, :orientation], orientation)
+      |> put_in([:objects, :car, :orientation_rad], orientation_rad)
+      |> put_in([:objects, :car, :orientation_grad], orientation_grad)
+      |> put_in([:objects, :car, :last_action], action)
 
     # IO.inspect ' --------> STATE <----------'
     # IO.inspect new_state.objects
+    memory_count = Memory.count(state.memory_pid)
+
+    if memory_count == 20 do
+      state.memory_pid
+      |> Memory.list()
+      |> Enum.shuffle
+      |> Enum.each(fn params -> learn_with_memories(state.neural_network_pid, params) end)
+
+      state.memory_pid |> Memory.reset()
+    end
+
+    IO.inspect new_state
+
+    # require IEx
+    # IEx.pry()
 
     {:noreply, new_state, push: graph}
   end
 
-  # # Keyboard controls
-  # def handle_input({:key, {"left", :press, _}}, _context, state) do
-  #   {:noreply, Car.update_rotation(state, 1)}
-  # end
-  #
-  # def handle_input({:key, {"right", :press, _}}, _context, state) do
-  #   {:noreply, Car.update_rotation(state, 2)}
-  # end
-  #
-  # def handle_input({:key, {"up", :press, _}}, _context, state) do
-  #   {:noreply, Car.update_rotation(state, 0)}
-  # end
-  #
-  # def handle_input(_input, _context, state), do: {:noreply, state}
+  defp learn_with_memories(neural_network_pid,
+                           %{ last_signal_center: m_last_signal_center,
+                              last_signal_right: m_last_signal_right,
+                              last_signal_left: m_last_signal_left,
+                              orientation_pos: m_orientation_pos,
+                              orientation_neg: m_orientation_neg,
+                              last_reward: m_last_reward,
+                              last_action: m_last_action,
+                              new_action: m_new_action}) do
+    last_action_predict = m_last_action
+    new_action_predict = neural_network_pid |> Network.forward([0, 0, 0, m_orientation_pos, m_orientation_neg])
+    x = Network.get_output_data(neural_network_pid)
+    gamma = 0.9
+    target = Enum.map(x, fn x1 -> gamma * x1 + m_last_reward  end)
+    neural_network_pid |> Network.backward(target)
+  end
+
 
   defp draw_objects(graph, object_map) do
     Enum.reduce(object_map, graph, fn {object_type, object_data}, graph ->
