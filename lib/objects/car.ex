@@ -4,9 +4,12 @@ defmodule AutonomousCar.Objects.Car do
 
   def move(%{objects: %{car: car}} = state) do
     # atualiza a posição do carro de acordo com sua última posição e velocidade
-    new_pos = Vector2.add(car.coords, car.velocity)
-    rotated = Vector2.rotate({10,0}, car.angle)
-    new_coords = Vector2.add(rotated, new_pos)
+    # new_pos = Vector2.add(car.coords, car.velocity)
+    # rotated = Vector2.rotate({10,0}, car.angle)
+    # new_coords = Vector2.add(rotated, new_pos)
+
+    car_velocity_rotate = Vector2.rotate(car.velocity, car.angle)
+    new_coords = Vector2.add(car.coords, car_velocity_rotate)
 
     # Keep car inside
     new_car_coords =
@@ -18,21 +21,20 @@ defmodule AutonomousCar.Objects.Car do
           _ -> new_coords
         end
       end
-    # IO.inspect car_coords, label: 'car_coords -->'
 
     state
     |> put_in([:objects, :car, :last_coords], car.coords)
     |> put_in([:objects, :car, :coords], new_car_coords)
   end
 
-  def update_rotation(state, action) do
+  def update_angle(state, action) do
     rotation = action?(action)
 
     state
     |> put_in([:objects, :car, :angle], state.objects.car.angle + rotation)
   end
 
-  defp action?(1), do: -20
+  defp action?(0), do: -20
   defp action?(2), do: 20
   defp action?(_), do: 0
 end

@@ -13,4 +13,7 @@ defmodule AutonomousCar.Math.Vector2 do
     angle * (Math.pi / 180)
   end
 
+  def distance({ax, ay}, {bx, by}) do
+    :math.sqrt(:math.pow(ax - bx, 2) + :math.pow(ay - by, 2))
+  end
 end
