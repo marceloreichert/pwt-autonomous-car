@@ -2,7 +2,6 @@ defmodule AutonomousCar.NeuralNetwork.Model do
   use GenServer
 
   def init(pid) do
-
     {:ok, pid}
   end
 
@@ -19,6 +18,12 @@ defmodule AutonomousCar.NeuralNetwork.Model do
   end
 
   # Public API
+  def model do
+    Axon.input({nil, 5})
+    |> Axon.dense(30, activation: :relu)
+    |> Axon.dense(3, activation: :softmax)
+  end
+
   def start_link() do
     GenServer.start_link(AutonomousCar.NeuralNetwork.Model, [])
   end
@@ -37,5 +42,11 @@ defmodule AutonomousCar.NeuralNetwork.Model do
 
   def reset(pid) do
     GenServer.cast(pid, :reset)
+  end
+
+  def start do
+    Axon.input({nil, 5})
+    |> Axon.dense(30, activation: :relu)
+    |> Axon.dense(3, activation: :softmax)
   end
 end

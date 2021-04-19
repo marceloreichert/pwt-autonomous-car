@@ -1,24 +1,20 @@
 defmodule AutonomousCar.Objects.Car do
 
-  alias AutonomousCar.Math.Vector2
-
   def move(%{objects: %{car: car}} = state) do
-    # atualiza a posição do carro de acordo com sua última posição e velocidade
-    # new_pos = Vector2.add(car.coords, car.velocity)
-    # rotated = Vector2.rotate({10,0}, car.angle)
-    # new_coords = Vector2.add(rotated, new_pos)
-
-    car_velocity_rotate = Vector2.rotate(car.velocity, car.angle)
-    new_coords = Vector2.add(car.coords, car_velocity_rotate)
+    car_velocity_rotate = AutonomousCar.Math.Vector2.rotate(car.velocity, car.angle)
+    new_coords = Scenic.Math.Vector2.add(car.coords, car_velocity_rotate)
 
     # Keep car inside
     new_car_coords =
-      with {sensor_center_x, sensor_center_y} <- state.objects.car.sensor.center,
-           {car_coords_x, car_coords_y} <- state.objects.car.coords,
-           viewport_width <- state.viewport_width do
-        case sensor_center_x do
-          sensor_center_x when sensor_center_x >= viewport_width -> {viewport_width, car_coords_y}
-          _ -> new_coords
+      with {car_coords_x, car_coords_y} <- new_coords,
+           viewport_width <- state.viewport_width,
+           viewport_height <- state.viewport_height do
+        cond do
+          car_coords_x + 10 >= viewport_width -> {viewport_width - 20, car_coords_y}
+          car_coords_x <= 10 -> {10, car_coords_y}
+          car_coords_y + 10 >= viewport_height -> {car_coords_x, viewport_height - 20}
+          car_coords_y <= 10 -> {car_coords_x, 10}
+          true -> new_coords
         end
       end
 

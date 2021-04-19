@@ -26,7 +26,8 @@ defmodule AutonomousCar.MixProject do
       {:scenic, "~> 0.10"},
       {:scenic_driver_glfw, "~> 0.10"},
       {:math, "~> 0.3.0"},
-      {:nx, "~> 0.1.0-dev", github: "elixir-nx/nx", sparse: "nx", override: true},
+      {:nx, "~> 0.1.0-dev", github: "elixir-nx/nx", branch: "main", sparse: "nx", override: true},
+      {:axon, "~> 0.1.0-dev", github: "elixir-nx/axon", branch: "main"}
     ]
   end
 end
