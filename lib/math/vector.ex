@@ -1,4 +1,4 @@
-defmodule AutonomousCar.Math.Vector2 do
+defmodule AutonomousCar.Math.Vector do
   import Math
 
   def rotate({x, y} = vector, angle) do

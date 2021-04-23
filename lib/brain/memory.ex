@@ -1,4 +1,4 @@
-defmodule Memory do
+defmodule AutonomousCar.Brain.Memory do
   use GenServer
 
   def init(pid) do
@@ -23,7 +23,7 @@ defmodule Memory do
 
   # Public API
   def start_link() do
-    GenServer.start_link(Memory, [])
+    GenServer.start_link(AutonomousCar.Brain.Memory, [])
   end
 
   def push(pid, item) do

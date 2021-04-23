@@ -4,16 +4,14 @@ defmodule AutonomousCar.Scene.Environment do
   alias Scenic.Graph
   alias Scenic.ViewPort
 
-  alias AutonomousCar.Math.Vector2
-
   alias AutonomousCar.Objects.Car
-  alias AutonomousCar.NeuralNetwork.Model
+  alias AutonomousCar.Brain.{Memory,Model}
 
   import Scenic.Primitives
   require Axon
   import Nx.Defn
 
-  @batch_size 100
+  @batch_size 150
 
   # Initial parameters for the game scene!
   def init(_arg, opts) do
@@ -42,14 +40,6 @@ defmodule AutonomousCar.Scene.Environment do
     car_coords = {trunc(viewport_width / 2), trunc(viewport_height / 2)}
     goal_coords = {20,20}
     car_velocity = {6,0}
-    vector_car_velocity_normalized = Scenic.Math.Vector2.normalize(car_velocity)
-
-    vector_between_car_and_goal = Scenic.Math.Vector2.sub(goal_coords, car_coords)
-    vector_between_car_and_goal_normalized = Scenic.Math.Vector2.normalize(vector_between_car_and_goal)
-
-    orientation = Scenic.Math.Vector2.dot(vector_car_velocity_normalized, vector_between_car_and_goal_normalized)
-    orientation_rad = Math.acos(orientation)
-    orientation_grad = (180 / :math.pi) * orientation_rad
 
     state = %{
       viewport: viewport,
@@ -70,9 +60,9 @@ defmodule AutonomousCar.Scene.Environment do
           coords: car_coords,
           velocity: car_velocity,
           angle: 0,
-          orientation: orientation,
-          orientation_rad: orientation_rad,
-          orientation_grad: orientation_grad,
+          orientation: 0,
+          orientation_rad: 0,
+          orientation_grad: 0,
           signal: %{
             left: 0,
             center: 0,
@@ -87,7 +77,10 @@ defmodule AutonomousCar.Scene.Environment do
       |> draw_objects(state.objects)
       |> draw_vector(car_coords, goal_coords, :blue)
 
-    state = state |> put_in([:graph], graph)
+    state = put_in(state, [:graph], graph)
+
+    IO.puts("\n")
+    IO.puts("--STARTED--")
 
     {:ok, state, push: graph}
   end
@@ -97,7 +90,7 @@ defmodule AutonomousCar.Scene.Environment do
     %{transforms: %{translate: sensor_center}} = List.first(sensor_center)
 
     car_object = Graph.get(state.graph, :car)
-    %{transforms: %{rotate: car_rotate}} = List.first(car_object)
+    %{transforms: %{rotate: car_rotate, pin: car_coords}} = List.first(car_object)
 
     car_look_goal = Graph.get(state.graph, :base)
     %{data: {car_look_goal_from, car_look_goal_to}} = List.first(car_look_goal)
@@ -105,68 +98,89 @@ defmodule AutonomousCar.Scene.Environment do
     car_look_forward = Graph.get(state.graph, :velocity)
     %{data: {car_look_forward_from, car_look_forward_to}} = List.first(car_look_forward)
 
+    {car_x, car_y} = car_coords
+
     v_car_look_goal = Scenic.Math.Vector2.sub(car_look_goal_from, car_look_goal_to)
     v_car_look_goal_normalized = Scenic.Math.Vector2.normalize(v_car_look_goal)
 
     v_car_look_forward = Scenic.Math.Vector2.sub(car_look_forward_from, car_look_forward_to)
-    v_car_look_forward_rotate = AutonomousCar.Math.Vector2.rotate(v_car_look_forward, state.objects.car.angle)
+    v_car_look_forward_rotate = AutonomousCar.Math.Vector.rotate(v_car_look_forward, state.objects.car.angle)
     v_car_look_forward_normalized = Scenic.Math.Vector2.normalize(v_car_look_forward_rotate)
 
     orientation = Scenic.Math.Vector2.dot(v_car_look_goal_normalized, v_car_look_forward_normalized)
     orientation_rad = Math.acos(orientation)
     orientation_grad = (180 / :math.pi) * orientation_rad
 
-    state_actual = [0,0,0, state.objects.car.orientation, -state.objects.car.orientation]
-    distance_current = state.distance
+    distance = Scenic.Math.Vector2.distance(car_coords, {20,20})
+
+    signals =
+      cond do
+        car_x + 20 >= state.viewport_width -> {1,1,1}
+        car_x <= 20 -> {1,1,1}
+        car_y + 20 >= state.viewport_height -> {1,1,1}
+        car_y <= 20 -> {1,1,1}
+        true -> {0,0,0}
+      end
+    {signal_left, signal_center, signal_right} = signals
+
+    state_final = [signal_left, signal_center, signal_right, orientation, -orientation]
 
     Memory.push(state.memory_pid, %{
-      state_actual: state_actual,
+      state_initial: [
+        state.objects.car.signal.left,
+        state.objects.car.signal.center,
+        state.objects.car.signal.right,
+        state.objects.car.orientation,
+        -state.objects.car.orientation],
       action: state.action,
       reward: state.reward,
-      done: false,
-      state_prime: [0,0,0, orientation, -orientation]
+      state_final: state_final,
+      frame_count: frame_count,
+      distance: state.distance
     })
 
     prob_actions =
       case state.model_fit do
         true ->
-          inputs = Nx.tensor(state_actual) |> Nx.new_axis(0)
-          params = state.model_pid |> Model.pull
-          Model.model |> Axon.predict(params, Nx.tensor(state_actual))
-        _ ->
-          Nx.random_uniform({3})
-    end
-
-    action = Nx.argmax(prob_actions) |> Nx.to_scalar
-
-    state = state |> Car.update_angle(action)
-
-    state =
-      if rem(frame_count, 1) == 0 do
-        state |> Car.move
-      else
-        state
+          if Nx.random_uniform(1) |> Nx.to_scalar <= 0.3 do
+            Axon.predict(Model.model, Model.pull(state.model_pid), Nx.tensor(state_final))
+          else
+            get_random_values
+          end
+        _ -> get_random_values
       end
 
+    action =
+      Nx.argmax(prob_actions)
+      |> Nx.to_scalar()
+
+    state =
+      state
+      |> Car.update_angle(action)
+      |> Car.move()
 
     {car_x, car_y} = state.objects.car.coords
+
     distance = Scenic.Math.Vector2.distance(state.objects.car.coords, state.objects.goal.coords)
 
     reward =
-      cond do
-        distance < distance_current ->
-          1
-        car_x < 10 ->
-          -0.9
-        car_x > state.viewport_width - 10 ->
-          -0.9
-        car_y < 10 ->
-          -0.9
-        car_y > state.viewport_height - 10 ->
-          -0.9
-        true ->
-          -0.4
+      case {car_x, car_y, distance} do
+        {car_x, car_y, distance} when car_x <= 20 ->
+          -1
+        {car_x, car_y, distance} when car_x + 20 >= state.viewport_width ->
+          -1
+        {car_x, car_y, distance} when car_y <= 20 ->
+          -1
+        {car_x, car_y, distance} when car_y + 20 >= state.viewport_height ->
+          -1
+        {car_x, car_y, distance} when distance < state.distance ->
+          0.4
+        _ ->
+          -0.5
       end
+
+    IO.puts("Reward -> #{reward}")
+
 
     memory_count = Memory.count(state.memory_pid)
 
@@ -186,13 +200,15 @@ defmodule AutonomousCar.Scene.Environment do
     # ----------------------------------------------
 
     if memory_count == @batch_size do
+      IO.inspect(label: "Training ->")
+
       memories =
         state.memory_pid
         |> Memory.list()
         |> Enum.shuffle
 
       train_samples = memories
-        |> Enum.map(fn x -> x.state_actual end)
+        |> Enum.map(fn x -> x.state_initial end)
         |> Nx.tensor()
         |> Nx.to_batched_list(@batch_size)
 
@@ -201,19 +217,37 @@ defmodule AutonomousCar.Scene.Environment do
         |> Nx.to_batched_list(@batch_size)
 
       params = Model.pull(state.model_pid)
+
       {new_params, _} =
         Model.model
-        |> Axon.Training.step(:binary_cross_entropy, Axon.Optimizers.sgd(0.01))
-        |> Axon.Training.train(train_samples, train_labels, epochs: 1)
+        |> AutonomousCar.Brain.Training.step({params, Nx.tensor(0.0)}, :mean_squared_error, Axon.Optimizers.adamw(0.005))
+        |> AutonomousCar.Brain.Training.train(train_samples, train_labels, epochs: 1)
 
       Model.push(new_params, state.model_pid)
 
       state.memory_pid |> Memory.reset()
     end
 
+    # See if goal is get it
+    goal_coords =
+      cond do
+        distance < 50 && state.objects.goal.coords == {20,20} ->
+          {state.viewport_width - 20, state.viewport_height - 20}
+
+        distance < 50 && state.objects.goal.coords != {20,20} ->
+          {20,20}
+
+        distance > 50 ->
+          state.objects.goal.coords
+      end
+
     new_state =
       state
       |> update_in([:frame_count], &(&1 + 1))
+      |> put_in([:objects, :goal, :coords], goal_coords)
+      |> put_in([:objects, :car, :signal, :left], signal_left)
+      |> put_in([:objects, :car, :signal, :center], signal_center)
+      |> put_in([:objects, :car, :signal, :right], signal_right)
       |> put_in([:objects, :car, :orientation], orientation)
       |> put_in([:objects, :car, :orientation_rad], orientation_rad)
       |> put_in([:objects, :car, :orientation_grad], orientation_grad)
@@ -229,16 +263,17 @@ defmodule AutonomousCar.Scene.Environment do
   defp gen_data_labels([], _), do: []
 
   defp gen_data_labels([xp | samples], state) do
-    v = get_values(xp.state_actual, state) |> Nx.to_flat_list()
-    vr = if xp.done, do: xp.reward, else: calc_r(xp.reward, 0.99, get_values(xp.state_prime, state))
+    v_initial = get_values(xp.state_initial, state) |> Nx.to_flat_list()
+    v_final = get_values(xp.state_final, state) |> Nx.to_flat_list()
+    vr = calc_r(xp.reward, 0.99, get_values(xp.state_final, state))
 
-    labels = List.replace_at(v, xp.action, Nx.to_scalar(vr))
+    labels = List.replace_at(v_initial, xp.action, Nx.to_scalar(vr))
     [labels | gen_data_labels(samples, state)]
   end
 
-  # defp get_values(_s, state) do
-  #   Nx.random_uniform({3})
-  # end
+  defp get_random_values do
+    Nx.random_uniform({3})
+  end
 
   defp get_values(s, state) do
     inputs = Nx.tensor(s) |> Nx.new_axis(0)
