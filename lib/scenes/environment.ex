@@ -5,7 +5,7 @@ defmodule AutonomousCar.Scene.Environment do
   alias Scenic.ViewPort
 
   alias AutonomousCar.Objects.Car
-  alias AutonomousCar.Brain.{Memory,Model}
+  alias AutonomousCar.Brain.{Memory,Model,Learn}
 
   import Scenic.Primitives
   require Axon
@@ -86,6 +86,8 @@ defmodule AutonomousCar.Scene.Environment do
   end
 
   def handle_info(:frame, %{frame_count: frame_count} = state) do
+    IO.puts("\n")
+
     sensor_center = Graph.get(state.graph, :sensor_center)
     %{transforms: %{translate: sensor_center}} = List.first(sensor_center)
 
@@ -139,6 +141,8 @@ defmodule AutonomousCar.Scene.Environment do
       distance: state.distance
     })
 
+    IO.inspect(state_final, label: "State -> ")
+
     prob_actions =
       case state.model_fit do
         true ->
@@ -150,9 +154,13 @@ defmodule AutonomousCar.Scene.Environment do
         _ -> get_random_values
       end
 
+    IO.inspect(prob_actions, label: "Probs -> ")
+
     action =
       Nx.argmax(prob_actions)
       |> Nx.to_scalar()
+
+    IO.puts("Action -> #{action}")
 
     state =
       state
@@ -181,16 +189,6 @@ defmodule AutonomousCar.Scene.Environment do
 
     IO.puts("Reward -> #{reward}")
 
-
-    memory_count = Memory.count(state.memory_pid)
-
-    model_fit =
-      cond do
-        state.model_fit -> true
-        memory_count == @batch_size -> true
-        true -> false
-      end
-
     # ----------------------------------------------
     graph =
       Graph.build(theme: :dark)
@@ -199,34 +197,7 @@ defmodule AutonomousCar.Scene.Environment do
       |> draw_model_fit(state.model_fit)
     # ----------------------------------------------
 
-    if memory_count == @batch_size do
-      IO.inspect(label: "Training ->")
-
-      memories =
-        state.memory_pid
-        |> Memory.list()
-        |> Enum.shuffle
-
-      train_samples = memories
-        |> Enum.map(fn x -> x.state_initial end)
-        |> Nx.tensor()
-        |> Nx.to_batched_list(@batch_size)
-
-      train_labels = gen_data_labels(memories, state)
-        |> Nx.tensor()
-        |> Nx.to_batched_list(@batch_size)
-
-      params = Model.pull(state.model_pid)
-
-      {new_params, _} =
-        Model.model
-        |> AutonomousCar.Brain.Training.step({params, Nx.tensor(0.0)}, :mean_squared_error, Axon.Optimizers.adamw(0.005))
-        |> AutonomousCar.Brain.Training.train(train_samples, train_labels, epochs: 1)
-
-      Model.push(new_params, state.model_pid)
-
-      state.memory_pid |> Memory.reset()
-    end
+    model_fit = Learn.learning(state, @batch_size)
 
     # See if goal is get it
     goal_coords =
@@ -260,34 +231,13 @@ defmodule AutonomousCar.Scene.Environment do
     {:noreply, new_state, push: graph}
   end
 
-  defp gen_data_labels([], _), do: []
-
-  defp gen_data_labels([xp | samples], state) do
-    v_initial = get_values(xp.state_initial, state) |> Nx.to_flat_list()
-    v_final = get_values(xp.state_final, state) |> Nx.to_flat_list()
-    vr = calc_r(xp.reward, 0.99, get_values(xp.state_final, state))
-
-    labels = List.replace_at(v_initial, xp.action, Nx.to_scalar(vr))
-    [labels | gen_data_labels(samples, state)]
-  end
-
   defp get_random_values do
     Nx.random_uniform({3})
   end
 
-  defp get_values(s, state) do
-    inputs = Nx.tensor(s) |> Nx.new_axis(0)
-
-    params = state.model_pid |> Model.pull
-    Model.model |> Axon.predict(params, inputs)
-  end
-
-  defn calc_r(r, gamma, values) do
-    r + (gamma * Nx.reduce_max(values))
-  end
-
   defp draw_vector(graph, from, to, color) do
-    graph |> line( {from, to}, stroke: {4, color}, cap: :round, id: :base )
+    # graph |> line( {from, to}, stroke: {1, color}, cap: :round, id: :base )
+    graph |> line( {from, to}, cap: :round, id: :base )
   end
 
   defp draw_model_fit(graph, model_fit) do
@@ -324,7 +274,7 @@ defmodule AutonomousCar.Scene.Environment do
         |> circle(4, fill: :red, translate: {x + 22, y - 5}, id: :sensor_left)
         |> circle(4, fill: :green, translate: {x + 28, y + 5}, id: :sensor_center)
         |> circle(4, fill: :blue, translate: {x + 22, y + 15}, id: :sensor_right)
-        |> line({ {x + 28, y + 5}, {x + 28 + 10, y + 5} }, stroke: {3, :blue}, cap: :round, id: :velocity )
+        |> line({ {x + 28, y + 5}, {x + 28 + 10, y + 5} }, cap: :round, id: :velocity )
       end, rotate: angle_radians, pin: {x, y}, id: :car)
   end
 

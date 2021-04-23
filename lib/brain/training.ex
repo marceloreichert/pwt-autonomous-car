@@ -57,10 +57,9 @@ defmodule AutonomousCar.Brain.Training do
           |> Nx.backend_transfer()
           |> Nx.to_scalar()
 
-        # IO.puts("\n")
+        IO.puts("\n")
         IO.puts("Epoch #{epoch} Time: #{time / 1_000_000}s")
         IO.puts("Epoch #{epoch} Loss: #{epoch_avg_loss}")
-        # IO.puts("\n")
         model_state
     end
   end
